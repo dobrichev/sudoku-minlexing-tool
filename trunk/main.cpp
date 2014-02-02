@@ -921,11 +921,13 @@ void patcanon(const char *source, char *result) {
 							if(labelPerm[fromDigit] > minLex[toRow * 9 + col])
 								goto nextColsPerm;
 							if(labelPerm[fromDigit] < minLex[toRow * 9 + col]) {
-								if(minLex[toRow * 9 + col] >= (1 << 5)) { //invalidate the rest only if they are touched
+								//if(minLex[toRow * 9 + col] >= (1 << 5)) { //invalidate the rest only if they are touched
+								//the following puzzle demonstrates this is a bug
+								//................12.....1345..6.74..1.7.8.6.348.4312.76.8..25.635..6.7.2.6.2138.57
 									for(int i = toRow * 9 + col + 1; i < 81; i++) {
 										minLex[i] = (result[i] << 5); //invalidate the rest
 									}
-								}
+								//}
 								minLex[toRow * 9 + col] = labelPerm[fromDigit]; //the best result so far
 							}
 						} //col
