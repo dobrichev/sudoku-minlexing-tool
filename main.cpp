@@ -1,20 +1,11 @@
+//Number of automorphisms for stream of Sudoku subgrids/patterns
+//last changed October 22, 2014
 //Author: Mladen Dobrichev
 
 #define _CRT_SECURE_NO_DEPRECATE
 #define _CRT_NONSTDC_NO_DEPRECATE
 
 #include <stdio.h>
-#include <time.h>
-#include <stdlib.h>
-
-//uncomment to generate the bestTripletPermutations lookup
-//#define PATTERN_MINLEX_PRINT_LOOKUPS
-
-//uncomment to include code for pattern minlex transformations only
-//#define PATTERN_MINLEX_ONLY
-
-//reserved
-//#define SUBGRID_PSEUDOMINLEX
 
 const int minCanNineBits [512] = { //a precomputed minlexed recomposition of the bit triplets for a 9-bits input
 	0, 1, 1, 3, 1, 3, 3, 7, 1, 9, 9, 11, 9, 11, 11, 15, 1, 9, 9, 11, 9, 11, 11, 15, 3, 11, 11, 27, 11,
@@ -41,13 +32,12 @@ const int minCanNineBits [512] = { //a precomputed minlexed recomposition of the
 
 struct gridPattern {
 	int rows[9];
-#ifndef PATTERN_MINLEX_ONLY
 	int digits[9][9];
-#endif
 };
 
-static void fromString(const char *txt, gridPattern &normal, gridPattern &transposed) {
+static int fromString(const char *txt, gridPattern &normal, gridPattern &transposed) {
 	int src = 0; //pointer to a character in the given text
+	int nGivens = 0;
 	transposed.rows[0] = 0;
 	transposed.rows[1] = 0;
 	transposed.rows[2] = 0;
@@ -62,21 +52,19 @@ static void fromString(const char *txt, gridPattern &normal, gridPattern &transp
 		for(int col = 0; col < 9; col++) {
 			int c = txt[src]; //read the character src points to
 			if(c >= '1' && c <= '9') { //it is a "given"
+				nGivens++;
 				r |= (1 << (8 - col)); //most significant bit is for c0, less significant for c8
 				transposed.rows[col] |= (1 << (8 - row));
-#ifndef PATTERN_MINLEX_ONLY
 				normal.digits[row][col] = transposed.digits[col][row] = c - '0';
-#endif
 			}
 			else {
-#ifndef PATTERN_MINLEX_ONLY
 				normal.digits[row][col] = transposed.digits[col][row] = 0;
-#endif
 			}
 			src++; //move to next char
 		}
 		normal.rows[row] = r;
 	}
+	return nGivens;
 }
 static int bestTopRowScore(gridPattern &p) {
 	//returns the smallest row after canonicalization of each row independently
@@ -653,8 +641,8 @@ struct candidate {
 	}
 	void expandStacks(const gridPattern * const pair, int topKey, candidate *results, int &nResults) {
 		//for a top row, obtain stack and cols permutations
-		const gridPattern &gr = pair[isTransposed];
-		int rowGivens = gr.rows[mapRowsBackward[0]];
+		const gridPattern &gr = pair[(int)isTransposed];
+		int rowGivens = gr.rows[(int)mapRowsBackward[0]];
 		for(int stackPerm = 0; stackPerm < 6; stackPerm++) {
 			int toTriplets[3];
 			toTriplets[perm[stackPerm][0]] = (rowGivens >> 6) & 7;
@@ -680,73 +668,19 @@ struct candidate {
 	}
 };
 const int candidate::perm[6][3] =			{{0,1,2},{0,2,1},{1,0,2},{1,2,0},{2,0,1},{2,1,0}};
-//const int candidate::permBackward[6][3] =	{{2,1,0},{2,0,1},{1,2,0},{0,2,1},{1,0,2},{0,1,2}};
-//const int candidate::permBackward[6][3] =	{{6,3,0},{6,0,3},{3,6,0},{0,6,3},{3,0,6},{0,3,6}}; //scaled * 3
 const candidate candidate::defaultCandidate = {0, {-1,-1,-1,-1,-1,-1,-1,-1,-1}, {-1,-1,-1,-1,-1,-1,-1,-1,-1}, 63, {63,63,63}};
-
-#ifdef PATTERN_MINLEX_PRINT_LOOKUPS
-void filterPerm(int givens, int srcMask, int &nSolutions, int &resMask, int &bestResult) {
-	int ga[3];
-	nSolutions = 0;
-	bestResult = 0xffff;
-	resMask = 0;
-	for(int g = 0; g < 3; g++) {
-		ga[g] = ((givens >> (2 - g)) & 1);
-	}
-	for(int p = 0; p < 6; p++) {
-		if(srcMask & (1 << p)) {
-			int res = 0;
-			for(int g = 0; g < 3; g++) {
-				if(ga[g]) {
-					res |= (1 << (2 - candidate::perm[p][g]));
-				}
-			}
-			if(res > bestResult) continue;
-			if(res < bestResult) {
-				nSolutions = 0;
-				bestResult = res;
-				resMask = 0;
-			}
-			resMask |= (1 << p);
-			nSolutions++;
-		}
-	}
-}
-
-void testFilterPattern () {
-	for(int givens = 0; givens < 8; givens++) {
-		printf("{\n");
-		for(int mask = 0; mask < (1 << 6); mask++) {
-			int nSolutions, resMask, bestResult;
-			filterPerm(givens, mask, nSolutions, resMask, bestResult);
-			printf("\t{%d, %d, %d},\t//[%d][%d]=", bestResult, resMask, nSolutions, givens, mask);
-			char buf[100];
-			itoa(givens, buf, 2);
-			printf("[%3.3s]", buf);
-			itoa(mask, buf, 2);
-			printf("[%6.6s]->{", buf);
-			itoa(bestResult, buf, 2);
-			printf("%3.3s,", buf);
-			itoa(resMask, buf, 2);
-			printf("%6.6s,", buf);
-			printf("%d}\n", nSolutions);
-		}
-		printf("},\n");
-	}
-}
-#endif
 
 //CAND_LIST_SIZE worst case is 15552 = 2 (transpose) * 6 (band permutations) * 6*6*6 (rows in a band perm) * 6 (stack perm)
 #define CAND_LIST_SIZE 15552
 
-void patcanon(const char *source, char *result) {
-	//remove the static modifier for multithreading processing
-	static candidate candidates[CAND_LIST_SIZE]; //rows 0,2,4,6,8
-	static candidate candidates1[CAND_LIST_SIZE]; //rows 1,3,5,7
-	static gridPattern pair[2];
-	static int minTopRowScores[2], minTopRowScore;
+int patcanon(const char *source, char *result) {
+	candidate candidates[CAND_LIST_SIZE]; //rows 0,2,4,6,8
+	candidate candidates1[CAND_LIST_SIZE]; //rows 1,3,5,7
+	gridPattern pair[2];
+	int minTopRowScores[2], minTopRowScore;
+	//char result[81];
 
-	fromString(source, pair[0], pair[1]);
+	int nGivens = fromString(source, pair[0], pair[1]);
 
 	minTopRowScores[0] = bestTopRowScore(pair[0]);
 	minTopRowScores[1] = bestTopRowScore(pair[1]);
@@ -810,10 +744,10 @@ void patcanon(const char *source, char *result) {
 				if(old.mapRowsForward[fromRow] >= 0)
 					continue; //skip previously mapped rows
 				int toTriplets[3];
-				int rowGivens = pair[old.isTransposed].rows[fromRow]; //stacks unmapped
-				toTriplets[candidate::perm[old.stacksPerm][0]] = (rowGivens >> 6);// & 7;
-				toTriplets[candidate::perm[old.stacksPerm][1]] = (rowGivens >> 3) & 7;
-				toTriplets[candidate::perm[old.stacksPerm][2]] = (rowGivens >> 0) & 7;
+				int rowGivens = pair[(int)old.isTransposed].rows[fromRow]; //stacks unmapped
+				toTriplets[candidate::perm[(int)old.stacksPerm][0]] = (rowGivens >> 6);// & 7;
+				toTriplets[candidate::perm[(int)old.stacksPerm][1]] = (rowGivens >> 3) & 7;
+				toTriplets[candidate::perm[(int)old.stacksPerm][2]] = (rowGivens >> 0) & 7;
 				//const bestTripletPermutation &bt0 = bestTripletPermutations[rowGivens >> (candidate::permBackward[old.stacksPerm][0]) & 7][old.colsPermMask[0]];
 				const bestTripletPermutation &bt0 = bestTripletPermutations[toTriplets[0]][old.colsPermMask[0]];
 				if(bt0.bestResult > bestTriplets0)
@@ -874,7 +808,6 @@ void patcanon(const char *source, char *result) {
 		fprintf(stderr, "bad news: no candidates for minlex due to program errors\n");
 	}
 
-#ifndef PATTERN_MINLEX_ONLY
 	//step 3: find the lexicographically minimal representative within the morphs,
 	// this time taking into account the real values of the input givens
 
@@ -882,12 +815,13 @@ void patcanon(const char *source, char *result) {
 	for(int i = 0; i < 81; i++) {
 		minLex[i] = (result[i] << 5); //initially set to large values
 	}
+	int am = 1; //the number of automorphisms
 	for(int curCandidateIndex = 0; curCandidateIndex < nCurCandidates; curCandidateIndex++) {
 		const candidate &target = curCandidates[curCandidateIndex];
 		int toTriplets[3];
-		toTriplets[candidate::perm[target.stacksPerm][0]] = 0;
-		toTriplets[candidate::perm[target.stacksPerm][1]] = 3;
-		toTriplets[candidate::perm[target.stacksPerm][2]] = 6;
+		toTriplets[candidate::perm[(int)target.stacksPerm][0]] = 0;
+		toTriplets[candidate::perm[(int)target.stacksPerm][1]] = 3;
+		toTriplets[candidate::perm[(int)target.stacksPerm][2]] = 6;
 		for(int colsPerm0 = 0; colsPerm0 < 6; colsPerm0++) {
 			if(((target.colsPermMask[0] >> colsPerm0) & 1) == 0)
 				continue; //forbidden permutation
@@ -909,8 +843,9 @@ void patcanon(const char *source, char *result) {
 					toColsInStack[6 + candidate::perm[colsPerm2][2]] = toTriplets[2] + 2;
 					int labelPerm[10] = {0,0,0,0,0,0,0,0,0,0}; //label mapping is unknown
 					int nextFreeLabel = 1;
+					int nSet = 0; //the number of givens with positions set
 					for(int toRow = 0; toRow < 9; toRow++) {
-						int *rowGivens = pair[target.isTransposed].digits[target.mapRowsBackward[toRow]];
+						int *rowGivens = pair[(int)target.isTransposed].digits[(int)target.mapRowsBackward[toRow]];
 						for(int col = 0; col < 9; col++) {
 							int fromDigit = rowGivens[toColsInStack[col]];
 							if(fromDigit == 0)
@@ -920,6 +855,7 @@ void patcanon(const char *source, char *result) {
 							}
 							if(labelPerm[fromDigit] > minLex[toRow * 9 + col])
 								goto nextColsPerm;
+							nSet++;
 							if(labelPerm[fromDigit] < minLex[toRow * 9 + col]) {
 								//if(minLex[toRow * 9 + col] >= (1 << 5)) { //invalidate the rest only if they are touched
 								//the following puzzle demonstrates this is a bug
@@ -929,6 +865,21 @@ void patcanon(const char *source, char *result) {
 									}
 								//}
 								minLex[toRow * 9 + col] = labelPerm[fromDigit]; //the best result so far
+								//the buffered transformations become invalid at this point
+								am = 1;
+							}
+							else {
+								//an isomorph of the currently best ordering
+								if(nSet == nGivens) {
+									am++; //latest digit of the isomorph increases the counter
+									//at this point we have the necessary information for the transformation and can buffer it (if eventually it is one of the best ones)
+									//TODO
+									//target.isTransposed
+									//target.stacksPerm
+									//colsPerm0, colsPerm1, colsPerm2
+									//band permutation and rows-in-each-band permutations should be decoded from rowGivens
+									//labelPerm
+								}
 							}
 						} //col
 					} //toRow
@@ -939,40 +890,18 @@ nextColsPerm:
 		} //colsPerm0
 	} //candidate
 	for(int i = 0; i < 81; i++) {
-		result[i] = minLex[i]; //copy the integers to chars
+		result[i] = minLex[i] ? minLex[i] + '0' : '.'; //copy the integers to chars
 	}
-#endif //ifndef PATTERN_MINLEX_ONLY
+	return am;
 }
 
 int main() {
-
-#ifdef PATTERN_MINLEX_PRINT_LOOKUPS
-	testFilterPattern();
-	return 0;
-#endif
-
-	clock_t start, finish;
-	int ret;
-	start = clock();
-
-	ret = 0;
-	char buf[2000];
-	char outPattern[88];
-	while(fgets(buf, sizeof(buf), stdin)) {
-		patcanon(buf, outPattern);
-		for(int i = 0; i < 81; i++) {
-#ifdef PATTERN_MINLEX_ONLY
-			buf[i] = (outPattern[i] ? '1' : '.');
-#else
-			buf[i] = (outPattern[i] ? outPattern[i] + '0' : '.');
-#endif
-		}
-		buf[81] = 0;
-		puts(buf);
-	}
-
-	finish = clock();
-	fprintf(stderr, "\nTotal time %2.3f seconds.\n", (double)(finish - start) / CLOCKS_PER_SEC);
-	return ret;
+        char buf[2000];
+        while(fgets(buf, sizeof(buf), stdin)) { //read a line of size up to 2000 symbols
+        	buf[81] = '\t';
+        	int numAutomorphisms = patcanon(buf, &buf[82]); //find the number of automorphisms of the pattern stored in the first 81 characters in the line
+            //printf("%81.81s\t%d\n", buf, numAutomorphisms); //print the first 81 characters of the line, followed by <tab> separator then by the number of automorphisms
+            printf("%163.163s\t%d\n", buf, numAutomorphisms);
+        }
 }
 
