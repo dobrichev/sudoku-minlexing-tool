@@ -673,7 +673,22 @@ const candidate candidate::defaultCandidate = {0, {-1,-1,-1,-1,-1,-1,-1,-1,-1}, 
 //CAND_LIST_SIZE worst case is 15552 = 2 (transpose) * 6 (band permutations) * 6*6*6 (rows in a band perm) * 6 (stack perm)
 #define CAND_LIST_SIZE 15552
 
-int patcanon(const char *source, char *result) {
+#include <set>
+#include <cstring>
+struct mapper {
+	//the map is composed for transformation of the canonicalized sub-grid to the original one, so that
+	//originalGrid[i] = label[canonicalGrid[cell[i]]]
+	char cell[81];
+	char label[10];
+	inline bool operator< (const mapper& rhs) const {
+		return std::memcmp(this, &rhs, sizeof(mapper)) < 0;
+	}
+};
+
+typedef std::set<mapper> mappers;
+mappers theMaps;
+
+int patcanon(const char *source, char *result, mappers *theMaps = (mappers*)NULL) {
 	candidate candidates[CAND_LIST_SIZE]; //rows 0,2,4,6,8
 	candidate candidates1[CAND_LIST_SIZE]; //rows 1,3,5,7
 	gridPattern pair[2];
@@ -681,6 +696,8 @@ int patcanon(const char *source, char *result) {
 	//char result[81];
 
 	int nGivens = fromString(source, pair[0], pair[1]);
+
+	if(theMaps) theMaps->clear();
 
 	minTopRowScores[0] = bestTopRowScore(pair[0]);
 	minTopRowScores[1] = bestTopRowScore(pair[1]);
@@ -811,11 +828,12 @@ int patcanon(const char *source, char *result) {
 	//step 3: find the lexicographically minimal representative within the morphs,
 	// this time taking into account the real values of the input givens
 
+	mapper map;
 	int minLex[81]; //the best result so far
 	for(int i = 0; i < 81; i++) {
 		minLex[i] = (result[i] << 5); //initially set to large values
 	}
-	int am = 1; //the number of automorphisms
+	int am = 0; //the number of automorphisms
 	for(int curCandidateIndex = 0; curCandidateIndex < nCurCandidates; curCandidateIndex++) {
 		const candidate &target = curCandidates[curCandidateIndex];
 		int toTriplets[3];
@@ -866,9 +884,10 @@ int patcanon(const char *source, char *result) {
 								//}
 								minLex[toRow * 9 + col] = labelPerm[fromDigit]; //the best result so far
 								//the buffered transformations become invalid at this point
-								am = 1;
+								am = 0;
+								if(theMaps) theMaps->clear();
 							}
-							else {
+							//else {
 								//an isomorph of the currently best ordering
 								if(nSet == nGivens) {
 									am++; //latest digit of the isomorph increases the counter
@@ -879,8 +898,22 @@ int patcanon(const char *source, char *result) {
 									//colsPerm0, colsPerm1, colsPerm2
 									//band permutation and rows-in-each-band permutations should be decoded from rowGivens
 									//labelPerm
+									if(theMaps) {
+										for(int r = 0; r < 9; r++) {
+											for(int c = 0; c < 9; c++) {
+												map.cell[target.isTransposed ? target.mapRowsBackward[r] + 9 * toColsInStack[c] : target.mapRowsBackward[r] * 9 + toColsInStack[c]] = r * 9 + c;
+												//it is a bit late, but mask non-participating cells so that the permutations of empty rows/columns don't add unnecessary mappings
+												//comment the following line to export all permutations
+												if(0 == minLex[r * 9 + c]) map.cell[target.isTransposed ? target.mapRowsBackward[r] + 9 * toColsInStack[c] : target.mapRowsBackward[r] * 9 + toColsInStack[c]] = 99;
+											}
+										}
+										for(int d = 0; d < 10; d++)
+											map.label[labelPerm[d]] = d;
+										map.label[0] = 0; //don't map zero to non-zero
+										theMaps->insert(map); //this will automatically ignore duplicates
+									}
 								}
-							}
+							//}
 						} //col
 					} //toRow
 nextColsPerm:
@@ -892,16 +925,26 @@ nextColsPerm:
 	for(int i = 0; i < 81; i++) {
 		result[i] = minLex[i] ? minLex[i] + '0' : '.'; //copy the integers to chars
 	}
-	return am;
+	return am | (nCurCandidates << 16);
 }
-
+#include <memory.h>
 int main() {
         char buf[2000];
         while(fgets(buf, sizeof(buf), stdin)) { //read a line of size up to 2000 symbols
         	buf[81] = '\t';
-        	int numAutomorphisms = patcanon(buf, &buf[82]); //find the number of automorphisms of the pattern stored in the first 81 characters in the line
+        	int numAutomorphisms = patcanon(buf, &buf[82], &theMaps); //find the number of automorphisms of the pattern stored in the first 81 characters in the line
             //printf("%81.81s\t%d\n", buf, numAutomorphisms); //print the first 81 characters of the line, followed by <tab> separator then by the number of automorphisms
-            printf("%163.163s\t%d\n", buf, numAutomorphisms);
+        	char b[200];
+        	for(int i = 0; i < 164; i++) b[i] = buf[i] ? 1 : 0;
+            printf("%163.163s\t%d\t%d\t%d\n", buf, numAutomorphisms & 0xFFFF, numAutomorphisms >> 16, (int)theMaps.size());
+            for(mappers::iterator m = theMaps.begin(); m != theMaps.end(); m++) {
+            	for(int i = 0; i < 81; i++)
+            		printf("%2.2d ", (int)m->cell[i]);
+           		printf(" ");
+            	for(int i = 0; i < 10; i++)
+            		printf("%1.1d ", (int)m->label[i]);
+           		printf("\n");
+            }
         }
 }
 
