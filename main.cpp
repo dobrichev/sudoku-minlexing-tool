@@ -892,21 +892,15 @@ int patcanon(const char *source, char *result, mappers *theMaps = (mappers*)NULL
 								if(nSet == nGivens) {
 									am++; //latest digit of the isomorph increases the counter
 									//at this point we have the necessary information for the transformation and can buffer it (if eventually it is one of the best ones)
-									//TODO
-									//target.isTransposed
-									//target.stacksPerm
-									//colsPerm0, colsPerm1, colsPerm2
-									//band permutation and rows-in-each-band permutations should be decoded from rowGivens
-									//labelPerm
 									if(theMaps) {
 										for(int r = 0; r < 9; r++) {
 											for(int c = 0; c < 9; c++) {
-												map.cell[target.isTransposed ? target.mapRowsBackward[r] + 9 * toColsInStack[c] : target.mapRowsBackward[r] * 9 + toColsInStack[c]] = r * 9 + c;
-												//it is a bit late, but mask non-participating cells so that the permutations of empty rows/columns don't add unnecessary mappings
-												//comment the following line to export all permutations
-												if(0 == minLex[r * 9 + c]) map.cell[target.isTransposed ? target.mapRowsBackward[r] + 9 * toColsInStack[c] : target.mapRowsBackward[r] * 9 + toColsInStack[c]] = 99;
+												int src = target.isTransposed ? target.mapRowsBackward[r] + 9 * toColsInStack[c] : target.mapRowsBackward[r] * 9 + toColsInStack[c]; //source cell index for target rc
+												map.cell[src] = minLex[r * 9 + c] ? r * 9 + c : 99; //map all non-givens to 99, this masking irrelevant permutations
 											}
 										}
+										for(int d = 0; d < 10; d++)
+											map.label[d] = 0;
 										for(int d = 0; d < 10; d++)
 											map.label[labelPerm[d]] = d;
 										map.label[0] = 0; //don't map zero to non-zero
@@ -942,8 +936,12 @@ int main() {
             		printf("%2.2d ", (int)m->cell[i]);
            		printf(" ");
             	for(int i = 0; i < 10; i++)
-            		printf("%1.1d ", (int)m->label[i]);
+            		printf("%d", (int)m->label[i]);
            		printf("\n");
+           		for(int i = 0; i < 81; i++) { //debug backward mapping, should display the original
+           			b[i] = m->cell[i] == 99 ? '.' : buf[82 + i] <= '9' && buf[82 + i] > 0 ? '0' + m->label[buf[82 + m->cell[i]] - '0'] : '*';
+           		}
+           		printf("%81.81s\n", b);
             }
         }
 }
