@@ -8,7 +8,7 @@ struct bestTripletPermutation {
 	int resultNumBits; //number of the possible permutations in the result mask
 };
 
-struct patminlex {
+class patminlex {
 	struct gridPattern {
 		int rows[9];
 		int digits[9][9];
@@ -25,7 +25,6 @@ struct patminlex {
 		unsigned char colsPermMask[3];	//bitmask of size 6 with still allowed permutations that don't affect the upper part of the result
 
 		static const int perm[6][3];	//all 6 possible mappings for 3 values. Used for stacks and columns within a stack reordering by a given permutation index[0..5]
-		//static const int permBackward[6][3];
 		static const candidate defaultCandidate;
 
 		void init(int transpose, int topRow) {
@@ -46,13 +45,15 @@ struct patminlex {
 		}
 	};
 
-	static const int minCanNineBits[512]; //a precomputed minlexed recomposition of the bit triplets for a 9-bits input
-	gridPattern pair[2]; //original and transposed patterns
+	static const int minCanNineBits[512]; //a precomputed minlexed recomposition of the bit triplets for any 9-bits input
 
 	class mappers : public std::set<mapper> {};
 	mappers theMaps;
 
-	patminlex(const char *source, char *result);
-	int fromString(const char *txt);
+	int fromString(const char *txt, gridPattern& normal, gridPattern& transposed);
 	static int bestTopRowScore(gridPattern &p);
+public:
+	patminlex(const char *source, char *result); //canonicalize & collect maps
+	void map(const char* src, char* results) const; //map back in all possible ways
+	int size() const; //the number of automorphs = the number of ways an input can be mapped to the same output and vice versa
 };

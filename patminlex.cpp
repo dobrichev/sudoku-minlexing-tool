@@ -586,11 +586,11 @@ void patminlex::candidate::expandStacks(const gridPattern * const pair, int topK
 	}
 }
 
-int patminlex::fromString(const char *txt) {
+int patminlex::fromString(const char *txt, gridPattern& normal, gridPattern& transposed) {
 	int src = 0; //pointer to a character in the given text
 	int nGivens = 0;
-	gridPattern& normal = pair[0];
-	gridPattern& transposed = pair[1];
+	//gridPattern& normal = pair[0];
+	//gridPattern& transposed = pair[1];
 	transposed.rows[0] = 0;
 	transposed.rows[1] = 0;
 	transposed.rows[2] = 0;
@@ -604,11 +604,13 @@ int patminlex::fromString(const char *txt) {
 		int r = 0;
 		for(int col = 0; col < 9; col++) {
 			int c = txt[src]; //read the character src points to
-			if(c >= '1' && c <= '9') { //it is a "given"
+			//if(c >= '1' && c <= '9') { //it is a "given", when input is ASCII
+			if(c) { //it is a "given", when input is bytes 0..9
 				nGivens++;
 				r |= (1 << (8 - col)); //most significant bit is for c0, less significant for c8
 				transposed.rows[col] |= (1 << (8 - row));
-				normal.digits[row][col] = transposed.digits[col][row] = c - '0';
+				//normal.digits[row][col] = transposed.digits[col][row] = c - '0'; //when input is ASCII
+				normal.digits[row][col] = transposed.digits[col][row] = c; //when input is bytes 0..9
 			}
 			else {
 				normal.digits[row][col] = transposed.digits[col][row] = 0;
@@ -637,13 +639,27 @@ int patminlex::bestTopRowScore(gridPattern &p) {
 const int patminlex::candidate::perm[6][3] =			{{0,1,2},{0,2,1},{1,0,2},{1,2,0},{2,0,1},{2,1,0}};
 const patminlex::candidate patminlex::candidate::defaultCandidate = {0, {-1,-1,-1,-1,-1,-1,-1,-1,-1}, {-1,-1,-1,-1,-1,-1,-1,-1,-1}, 63, {63,63,63}};
 
+void patminlex::map(const char* src, char* results) const {
+	char *r = results;
+    for(patminlex::mappers::const_iterator m = theMaps.begin(); m != theMaps.end(); m++) {
+   		for(int i = 0; i < 81; i++) { //debug backward mapping, should display the original
+   			r[i] = m->cell[i] == 99 ? 0 : m->label[(int)src[(int)m->cell[i]]];
+   		}
+   		r += 81;
+    }
+}
+
+int patminlex::size() const {
+	return (int)theMaps.size();
+}
+
 patminlex::patminlex(const char *source, char *result) {
 	candidate candidates[CAND_LIST_SIZE]; //rows 0,2,4,6,8
 	candidate candidates1[CAND_LIST_SIZE]; //rows 1,3,5,7
 	int minTopRowScores[2], minTopRowScore;
-	//char result[81];
+	gridPattern pair[2]; //original and transposed patterns
 
-	int nGivens = fromString(source); //compose the pair of the patterns for the original and transposed morph
+	int nGivens = fromString(source, pair[0], pair[1]); //compose the pair of the patterns for the original and transposed morph
 
 	theMaps.clear();
 
@@ -713,7 +729,6 @@ patminlex::patminlex(const char *source, char *result) {
 				toTriplets[candidate::perm[(int)old.stacksPerm][0]] = (rowGivens >> 6);// & 7;
 				toTriplets[candidate::perm[(int)old.stacksPerm][1]] = (rowGivens >> 3) & 7;
 				toTriplets[candidate::perm[(int)old.stacksPerm][2]] = (rowGivens >> 0) & 7;
-				//const bestTripletPermutation &bt0 = bestTripletPermutations[rowGivens >> (candidate::permBackward[old.stacksPerm][0]) & 7][old.colsPermMask[0]];
 				const bestTripletPermutation &bt0 = bestTripletPermutations[toTriplets[0]][old.colsPermMask[0]];
 				if(bt0.bestResult > bestTriplets0)
 					continue;
@@ -723,7 +738,6 @@ patminlex::patminlex(const char *source, char *result) {
 					bestTriplets1 = 7;
 					bestTriplets2 = 7;
 				}
-				//const bestTripletPermutation &bt1 = bestTripletPermutations[rowGivens >> (candidate::permBackward[old.stacksPerm][1]) & 7][old.colsPermMask[1]];
 				const bestTripletPermutation &bt1 = bestTripletPermutations[toTriplets[1]][old.colsPermMask[1]];
 				if(bt1.bestResult > bestTriplets1)
 					continue;
@@ -732,7 +746,6 @@ patminlex::patminlex(const char *source, char *result) {
 					bestTriplets1 = bt1.bestResult;
 					bestTriplets2 = 7;
 				}
-				//const bestTripletPermutation &bt2 = bestTripletPermutations[rowGivens >> (candidate::permBackward[old.stacksPerm][2]) & 7][old.colsPermMask[2]];
 				const bestTripletPermutation &bt2 = bestTripletPermutations[toTriplets[2]][old.colsPermMask[2]];
 				if(bt2.bestResult > bestTriplets2)
 					continue;
@@ -857,7 +870,11 @@ nextColsPerm:
 			} //colsPerm1
 		} //colsPerm0
 	} //candidate
+//	//if we expect result in ASCII
+//	for(int i = 0; i < 81; i++) {
+//		result[i] = minLex[i] ? minLex[i] + '0' : '.'; //copy the integers to chars
+//	}
 	for(int i = 0; i < 81; i++) {
-		result[i] = minLex[i] ? minLex[i] + '0' : '.'; //copy the integers to chars
+		result[i] = minLex[i];
 	}
 }
